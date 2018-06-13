@@ -11,6 +11,7 @@ from flags import flagZ, flagN, flagH, flagC
 from ..Logger import logger
 from Interrupts import InterruptVector, NoInterrupt
 import numpy as np
+import re
 
 class CPU(object): # 'object' is important for property!!!
     from opcodes import opcodes
@@ -35,6 +36,15 @@ class CPU(object): # 'object' is important for property!!!
     fNZ = property(lambda s:not bool(s.F & (1 << flagZ)), None)
 
     def __init__(self, MB, profiling=False):
+        for i in range(0, len(CPU_COMMANDS)):
+            trace_string = CPU_COMMANDS[i]
+            for char in ['A', 'B', 'C', 'D', 'E', 'H', 'L']:
+                pattern = "\\b" + char + "\\b"
+                replacement = "{}({{{}:#04x}})".format(char, char)
+                trace_string = re.sub(pattern, replacement, trace_string)
+            CPU_COMMANDS[i] = trace_string
+
+
         self.mb = MB
 
         self.interruptMasterEnable = False
@@ -64,34 +74,51 @@ class CPU(object): # 'object' is important for property!!!
 
     def executeInstruction(self, instruction):
         # '*' unpacks tuple into arguments
+        pc = self.PC;
+        regs = {
+                'A': self.A,
+                'B': self.B,
+                'C': self.C,
+                'D': self.D,
+                'E': self.E,
+                'F': self.F,
+                'H': self.H,
+                'L': self.L,
+                'SP': self.SP,
+                }
+
         success = instruction[0](*instruction[2])
 
         assert success is not None, "Opcode returned None! %0.2x" % self.mb[self.PC]
 
-        regs = 'Registers {{ a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, h: {}, l: {}, sp: {}, pc: {} }}'
-        regs = regs.format(
-                self.A,
-                self.B,
-                self.C,
-                self.D,
-                self.E,
-                self.F,
-                self.H,
-                self.L,
-                self.SP,
-                self.PC)
         if success:
             c = instruction[1][1]
             self.cycles += c
-            print(self.trace_inst + ' ' + regs + ' ' + str(c))
+            self.print_trace(pc, regs)
+            # print(self.trace_inst + ' ' + regs + ' ' + str(c))
             return c
             # return instruction[1][1]  # Select correct cycles for jumps
         else:
             c = instruction[1][0]
             self.cycles += c
-            print(self.trace_inst + ' ' + regs + ' ' + str(c))
+            self.print_trace(pc, regs)
+            # print(self.trace_inst + ' ' + regs + ' ' + str(c))
             return c
             # return instruction[1][0]
+
+    def print_trace(self, pc, regs):
+        # Ignore screen update
+        if 0xc7ee <= pc <= 0xc7f7:
+            return
+
+        diffs = []
+        for key in regs.keys():
+            value = regs[key]
+            new_value = getattr(self, key)
+            if value != new_value:
+                diffs.append("{}={:#04x}".format(key, new_value))
+        print("{:#06x}  {:20}  #  {}".format(pc, self.trace_inst.format(**regs), " ".join(diffs)))
+
 
     def fetchInstruction(self, pc):
         opcode = self.mb[pc]
