@@ -59,6 +59,8 @@ class CPU(object): # 'object' is important for property!!!
         if profiling:
             self.hitRate = np.zeros(shape=(512,), dtype=int)
 
+        self.cycles = 0
+
 
     def executeInstruction(self, instruction):
         # '*' unpacks tuple into arguments
@@ -66,17 +68,40 @@ class CPU(object): # 'object' is important for property!!!
 
         assert success is not None, "Opcode returned None! %0.2x" % self.mb[self.PC]
 
+        regs = 'Registers {{ a: {}, b: {}, c: {}, d: {}, e: {}, f: {}, h: {}, l: {}, sp: {}, pc: {} }}'
+        regs = regs.format(
+                self.A,
+                self.B,
+                self.C,
+                self.D,
+                self.E,
+                self.F,
+                self.H,
+                self.L,
+                self.SP,
+                self.PC)
         if success:
-            return instruction[1][1]  # Select correct cycles for jumps
+            c = instruction[1][1]
+            self.cycles += c
+            print(self.trace_inst + ' ' + regs + ' ' + str(c))
+            return c
+            # return instruction[1][1]  # Select correct cycles for jumps
         else:
-            return instruction[1][0]
+            c = instruction[1][0]
+            self.cycles += c
+            print(self.trace_inst + ' ' + regs + ' ' + str(c))
+            return c
+            # return instruction[1][0]
 
     def fetchInstruction(self, pc):
         opcode = self.mb[pc]
         if opcode == 0xCB:  # Extension code
             pc += 1
             opcode = self.mb[pc]
+            self.trace_inst = CPU_COMMANDS_EXT[opcode]
             opcode += 0x100  # Internally shifting look-up table
+        else:
+            self.trace_inst = CPU_COMMANDS[opcode]
 
         #Profiling
         if self.profiling:
